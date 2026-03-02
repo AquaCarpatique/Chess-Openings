@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Opening Trainer</title>
+
+<link rel="stylesheet"
+  href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.css" />
+
+<style>
+body { font-family: Inter, system-ui, Arial; background:#0f172a; color:#e6eef8; display:flex; gap:24px;
+       align-items:flex-start; padding:24px; }
+#boardWrap { background:#101827; padding:12px; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,.6); }
+#ui { width:420px; }
+textarea { width:100%; height:120px; font-family:monospace; font-size:13px; background:#0b1220; color:#cfe9ff; border:1px solid #1f2a3b; padding:8px; border-radius:6px; }
+button { background:#1f6feb; color:white; border:none; padding:8px 12px; border-radius:8px; cursor:pointer; margin:4px 4px 4px 0; }
+button.secondary { background:#2a2f3e; color:#cfe9ff; }
+.small { font-size:13px; color:#b7d7ff; margin-top:8px; display:block; }
+.stat { background:#071029; padding:8px; border-radius:8px; margin-top:8px; }
+#status { margin-top:10px; }
+.row { display:flex; gap:8px; align-items:center; }
+.select { width: 100%; padding:6px; border-radius:6px; background:#0b1220; color:#cfe9ff; border:1px solid #1f2a3b; }
+.info { margin-bottom:6px; }
+</style>
+</head>
+<body>
+<div id="boardWrap">
+  <div id="board" style="width: 420px"></div>
+</div>
+
+<div id="ui">
+<h2 style="margin:0 0 8px 0">Opening Trainer</h2>
+
+<label class="small">Choose Opening:</label>
+<select id="openingSelect" class="select">
+  <option value="">-- Select Opening --</option>
+</select>
+
+<label class="small">Choose Chapter / Variation:</label>
+<select id="variationSelect" class="select">
+  <option value="">-- Select Variation --</option>
+</select>
+
+<label class="small">Choose Mode:</label>
+<select id="modeSelect" class="select">
+  <option value="normal">Normal</option>
+  <option value="hard">Hard</option>
+</select>
+
+<div style="margin-top:8px;" class="row">
+  <button id="loadOpeningBtn">Load Selected Opening</button>
+  <button id="flipBoardBtn" class="secondary">Flip Board</button>
+  <button id="hintBtn" class="secondary">Hint</button>
+</div>
+
+<label class="small" style="margin-top:8px;">Or paste PGN/SAN:</label>
+<textarea id="pgn" placeholder="Paste PGN or moves here..."></textarea>
+
+<div style="margin-top:8px;" class="row">
+  <button id="startWhite" class="secondary">Start (You = White)</button>
+  <button id="startBlack" class="secondary">Start (You = Black)</button>
+  <button id="reset" class="secondary">Reset</button>
+</div>
+
+<div class="stat">
+  <div id="info" class="info">No opening loaded.</div>
+  <div id="status">Move: 0 / 0</div>
+  <div id="stats">Correct: 0 &nbsp; Wrong: 0</div>
+</div>
+
+<!-- Sounds (optional) -->
+<audio id="soundCapture" src="sounds/Capture.wav"></audio>
+<audio id="soundCastle" src="sounds/Castle.wav"></audio>
+<audio id="soundMoveSelf" src="sounds/MoveSelf.wav"></audio>
+<audio id="soundOpponentMove" src="sounds/OpponentMove.wav"></audio>
+<audio id="soundVariationComplete" src="sounds/Complete.mp3"></audio>
+<audio id="soundWrongMove" src="sounds/Wrong.mp3"></audio>
+<audio id="soundCheck" src="sounds/Check.wav"></audio>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+
+<script>
+
+// ------------------------------
+
+const openings = {
+  "Caro-Kann Defense": {
+    "Advance": {
+      "normal": [
+        ["e4","c6","d4","d5","e5","c5","c3","Nc6","Bb5","Qa5","Bxc6+","bxc6","Bd2","Qb6"],
+        ["e4","c6","d4","d5","e5","c5","c3","Nc6","f4","cxd4","cxd4","h5","Nf3","Bg4","Be2","e6","O-O","Nh6"],
+        ["e4","c6","d4","d5","e5","c5","c3","Nc6","Nf3","cxd4","cxd4","Bg4","Be2","e6","O-O","Nge7","Nc3","Nf5","Be3","Be7","a3","Rc8"],
+        ["e4","c6","d4","d5","e5","c5","c4","Nc6","Nf3","cxd4","Nxd4","e6","Nc3","Bc5","Nxc6","bxc6","cxd5","cxd5","Bb5+","Bd7"],
+        ["e4","c6","d4","d5","e5","c5","c4","Nc6","cxd5","Qxd5","Nc3","Qxd4","Be3","Qxd1+","Rxd1","Bd7"],
+        ["e4","c6","d4","d5","e5","c5","c4","Nc6","dxc5","e6","cxd5","exd5","Nf3","Bxc5","Bb5","Ne7","O-O","O-O","Nc3","Bg4"],
+        ["e4","c6","d4","d5","e5","c5","c4","Nc6","cxd5","Qxd5","Nf3","cxd4","Nc3","Qd8","Nb5","e6","Nbxd4","Bb4+","Bd2","Bxd2+","Qxd2","Nxd4","Nxd4","Ne7"],
+        ["e4","c6","d4","d5","e5","c5","c4","Nc6","Nf3","cxd4","Nxd4","e6","Nxc6","bxc6","cxd5","cxd5","Bb5+","Bd7","Qa4","Rb8","Bxd7+","Qxd7","Qxd7+","Kxd7","O-O"],
+        ["e4","c6","d4","d5","e5","c5","c4","Nc6","Nf3","cxd4","Nxd4","e6","Nc3","Bc5","Nxc6","bxc6","Qg4","Ne7","Qxg7","Rg8","Qxh7","Rb8"],
+        ["e4","c6","d4","d5","e5","c5","Nf3","cxd4","Nxd4","Nc6","Nxc6","bxc6","Bd3","e6","O-O","Ne7","Nd2","Ng6","Nf3","a5","Qe2","Be7"],
+        ["e4","c6","d4","d5","e5","c5","Nf3","cxd4","Qxd4","Nc6","Bb5","e6","O-O","Ne7","Bg5","h6"],
+        ["e4","c6","d4","d5","e5","c5","Nf3","cxd4","Qxd4","Nc6","Qf4","e6","Bd3","Nb4"],
+        ["e4","c6","d4","d5","e5","c5","Nf3","cxd4","Nxd4","Nc6","Bb5","Bd7","Nxc6","Bxc6","Bxc6+","bxc6","O-O","e6"]
+      ],
+      "hard": [
+        ["e4","c6","d4","d5","e5","c5","c3","Nc6","Bb5","Qa5","Bxc6+","bxc6","Bd2","Qb6","Qb3","cxd4","Qxb6","axb6","cxd4","Bf5","Nc3","e6","Nge2","Bb4","O-O","Ne7","a3","Bxc3","Bxc3","O-O"],
+        ["e4","c6","d4","d5","e5","c5","c3","Nc6","Bb5","Qa5","Bxc6+","bxc6","Bd2","Qb6","Bc1","e6","Ne2","Ba6","O-O","cxd4","cxd4","Ne7","Re1","Nf5","Nbc3","Bb4","a3","Be7","b4","O-O"],
+        ["e4","c6","d4","d5","e5","c5","c3","Nc6","Nf3","cxd4","cxd4","Bg4","Be2","e6","O-O","Nge7","Nc3","Nf5","Be3","Be7","a3","Rc8","h3","Bd3"]
+      ]
+    },
+    "Advance Weapon 1 Pin": {
+      "normal": [
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Bb5","e6","Be3","Ne7","c3","Bd7","Bxc6","Bxc6","Nf3","Nf5","Bd4","Nxd4","cxd4","b6","cxb6","Qxb6","Qd2","Rb8","b3","Bb4","Nc3","Bb5"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Bb5","e6","Be3","Ne7","Nf3","Nf5","Bd4","Nxd4","Qxd4","Qa5+","Nc3","Qxb5","Nxb5","Nxd4","Nfxd4","Bxc5","O-O-O","Ke7"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Bb5","e6","Be3","Ne7","c3","Bd7","Bxc6","Bxc6","Nf3","Nf5","Bd4","Nxd4","Qxd4","Qc7","b4","b6","cxb6","axb6"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Nf3","Bg4","Bb5","Qa5+","Nc3","e6","Be3","Ne7","a3","Qc7","h3","Bxf3","Qxf3","O-O-O","Qxf7","d4","Qxe6+","Kb8"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Nf3","Bg4","Bb5","Qa5+","Nc3","e6","Bxc6+","bxc6","Be3","Bxf3","Qxf3","Bxc5"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Bb5","e6","Nf3","Bxc5","O-O","Ne7"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Bb5","e6","b4","Bd7","Bxc6","Bxc6","Nf3","a5","c3","axb4","cxb4","b6","Be3","bxc5","bxc5","Bxc5"]
+      ]
+    },
+    "Advance Weapon 1 The Main Nf3": {
+      "normal": [
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Nf3","Bg4","Bf4","e6","Be2","Bxc5","O-O","Bxf3","Bxf3","Bd4"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Nf3","Bg4","c3","e6","b4","g6","Bb5","Bxf3","Qxf3","Bg7","Bxc6+","bxc6","Qe2","Qb8","f4","a5","a3","g5"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Nf3","Bg4","c3","e6","Bb5","Bxf3","Qxf3","Bxc5"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Nf3","Bg4","c3","e6","Be3","a6","Bd4","Bxf3","Qxf3","b6","cxb6","Nxd4","cxd4","Qxb6"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Nf3","Bg4","c3","e6","Be3","a6","Nbd2","Nxe5","Qa4+","Qd7","Qxd7+","Nxd7","b4","Be7"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Nf3","Bg4","c3","e6","Be3","a6","Nbd2","Nxe5","Be2","Nc6","O-O","Bxf3","Nxf3","g6"],
+      ]
+    },
+    "Advance Weapon 1 The Gotham": {
+      "normal": [
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Nf3","Bg4","Bf4","e6","Be2","Bxc5","O-O","Bxf3","Bxf3","Bd4"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","f4","Nh6","Be3","g5","fxg5","Ng4"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","f4","Nh6","c3","e6","b4","a5","b5","Ne7"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","f4","Nh6","c3","e6","Be3","g5","fxg5","Nf5","Bf2","Qxg5"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","f4","Nh6","Nf3","Bg4","h3","Bxf3","Qxf3","e6","Be3","Nf5","Bf2","Qa5+","Qc3","Qa4"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","f4","Nh6","Nf3","Bg4","Bd3","e6","Be3","d4"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","f4","Nh6","Nf3","Bg4","Be2","Nf5","O-O","e6","h3","Bxc5+","Kh2","h5"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","f4","Nh6","Nf3","Bg4","Be3","Nf5","Bf2","g5","fxg5","e6"],
+      ]
+    },
+    "Advance Weapon 1 The Modern": {
+      "normal": [
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Bb5","e6","Be3","Ne7","c3","Bd7","Bxc6","Bxc6","Nf3","Nf5","Bd4","Nxd4","cxd4","b6","cxb6","Qxb6","Qd2","Rb8","b3","Bb4","Nc3","Bb5"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Bb5","e6","Be3","Ne7","Nf3","Nf5","Bd4","Nxd4","Qxd4","Qa5+","Nc3","Qxb5","Nxb5","Nxd4","Nfxd4","Bxc5","O-O-O","Ke7"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Bb5","e6","Be3","Ne7","c3","Bd7","Bxc6","Bxc6","Nf3","Nf5","Bd4","Nxd4","Qxd4","Qc7","b4","b6","cxb6","axb6"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Nf3","Bg4","Bb5","Qa5+","Nc3","e6","Be3","Ne7","a3","Qc7","h3","Bxf3","Qxf3","O-O-O","Qxf7","d4","Qxe6+","Kb8"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Nf3","Bg4","Bb5","Qa5+","Nc3","e6","Bxc6+","bxc6","Be3","Bxf3","Qxf3","Bxc5"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Bb5","e6","Nf3","Bxc5","O-O","Ne7"],
+        ["e4","c6","d4","d5","e5","c5","dxc5","Nc6","Bb5","e6","b4","Bd7","Bxc6","Bxc6","Nf3","a5","c3","axb4","cxb4","b6","Be3","bxc5","bxc5","Bxc5"]
+      ]
+    },
+    "Exchange Variation Early Sidelines": {
+      "normal": [
+        ["e4","c6","d4","d5","exd5","cxd5","Nf3","Nf6","h3","Nc6","Bd3","Nb4","Bb5+","Bd7","Bxd7+","Qxd7","c3","Nc6","O-O","e6"],
+        ["e4","c6","d4","d5","exd5","cxd5","Nc3","Nf6","Nf3","Bg4","Be2","Nc6","O-O","e6","h3","Bh5","Bg5","Be7","Re1","O-O"],
+        ["e4","c6","d4","d5","exd5","cxd5","Bf4","Nc6","Nf3","Bg4","c3","e6","Nbd2","Bd6","Bxd6","Qxd6","Bd3","Nf6","O-O","O-O","Re1","Rab8"],
+        ["e4","c6","d4","d5","exd5","cxd5","Nf3","Nf6","Bd3","Bg4","O-O","Nc6","c3","e6","Bg5","Be7","Nbd2","O-O","Re1","Bh5"],
+      ]
+    }
+  }, // End of Caro-Kann
+
+  "King's Indian Defense": {
+    "Main Line": {
+      "normal": [
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","O-O","exd4","Nxd4","Re8","Bg5","h6","Bh4","g5","Bg3","Nxe4"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","O-O","exd4","Qxd4","Nbd7","Bg5","h6","Bh4","g5","Bg3","Re8"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","d5","a5","O-O","Na6","a3","Nc5","Qc2","a4"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","d5","a5","Bg5","h6","Bh4","Na6"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","d5","a5","O-O","Na6","a3","Nc5","Bg5","h6","Bxf6","Qxf6"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","O-O","exd4","Nxd4","Re8","f3","c6","Be3","d5","cxd5","Nxd5","Nxd5","cxd5","Bb5","Bd7"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","O-O","exd4","Nxd4","Re8","f3","c6","Kh1","Nbd7","Be3","a6"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","O-O","exd4","Nxd4","Re8","f3","c6","Be3","d5","cxd5","Nxd5","Bf2","Nf4","Bc4","Qg5"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","d5","a5","O-O","Na6","Be3","Ng4","Bg5","f6","Bh4","h5"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","O-O","exd4","Nxd4","Re8","f3","c6","Kh1","Nbd7","Bg5","Qb6","Nb3","a5"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","O-O","exd4","Nxd4","Re8","f3","c6","Bg5","Qb6","Na4","Qa5","Bd2","Qc7","Bc3","a6"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","O-O","exd4","Nxd4","Re8","f3","c6","Be3","d5","cxd5","Nxd5","Nxd5","cxd5","Nb5","a6","Nc3","d4"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","O-O","exd4","Nxd4","Re8","Bf3","Nbd7"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","O-O","exd4","Nxd4","Re8","f3","c6","Be3","d5","cxd5","Nxd5","Nxd5","cxd5","Bd3","Nd7"]
+      ],
+      "hard": [
+        ["e4","c6","d4","d5","e5","c5","c3","Nc6","Bb5","Qa5","Bxc6+","bxc6","Bd2","Qb6","Qb3","cxd4","Qxb6","axb6","cxd4","Bf5","Nc3","e6","Nge2","Bb4","O-O","Ne7","a3","Bxc3","Bxc3","O-O"]
+      ]
+    },
+    "Main Line 2": {
+      "normal": [
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Bg5","h6","Bxf6","Bxf6","e5","dxe5","dxe5","Bg7","Qxd8","Rxd8","Nd5","Nc6","Nxc7","Rb8","Nd5","Bg4"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","dxe5","dxe5","Bg5","Nbd7","O-O","c6"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","h3","e5","d5","a5","g4","Na6","Be3","Nc5","Nd2","c6"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","dxe5","dxe5","Qxd8","Rxd8","Nxe5","Nxe4","Nxf7","Bxc3+","bxc3","Kxf7"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","dxe5","dxe5","Qxd8","Rxd8","Nxe5","Nxe4","Nxe4","Bxe5","Bg5","Re8"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Bd3","e5","d5","a5"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","dxe5","dxe5","O-O","Nc6","Qxd8","Rxd8","Bg5","Re8"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","dxe5","dxe5","Qxd8","Rxd8","Bg5","Re8","O-O-O","Na6","Nxe5","Nc5","f3","Nfxe4","Nxe4","Nxe4","fxe4","Bxe5"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Bd3","e5","dxe5","dxe5","Nxe5","Nxe4","Nxe4","Bxe5"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Bg5","h6","Bh4","g5","Bg3","Nh5","Be2","Nxg3","hxg3","c5"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","e5","dxe5","dxe5","Qxd1+","Nxd1","Ng4","Bf4","Nc6"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","Nf3","O-O","Be2","e5","dxe5","dxe5","Qxd8","Rxd8","Bg5","Re8","Nd5","Nxd5","cxd5","c6","Bc4","cxd5","Bxd5","Nd7"]
+      ]
+    },
+    "The Four Pawns Attack": {
+      "normal": [
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f4","O-O","Nf3","e5","fxe5","dxe5","Nxe5","c5","d5","Re8","Bf4","Nh5","Nd3","Bxc3+","bxc3","Rxe4+"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f4","O-O","Nf3","e5","fxe5","dxe5","d5","c6","Bd3","b5","O-O","bxc4","Bxc4","cxd5","Nxd5","Ba6"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f4","O-O","Nf3","e5","fxe5","dxe5","d5","c6","Bd3","b5","cxb5","cxd5","exd5","e4","Nxe4","Nxe4","Bxe4","Re8"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f4","O-O","e5","dxe5","dxe5","Qxd1+","Kxd1","Ne8"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f4","O-O","e5","dxe5","dxe5","Qxd1+","Rxd8","fxe5","Nfd7"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f4","O-O","e5","dxe5","dxe5","Qxd1+","Nxd1","Ne4","Bd3","Nc5","Bc2","f6"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f4","O-O","Nf3","e5","dxe5","dxe5","Qxd8","Rxd8","Nxe5","Nfd7","Nxd7","Bxc3+","bxc3","Nxd7","Be3","Nf6","e5","Ne4"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f4","O-O","Nf3","e5","d5","exf4","Bxf4","Nxe4","Nxe4","Re8","Bd3","f5"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f4","O-O","Nf3","e5","d5","c6","Be2","b5","cxb5","cxd5","exd5","a6","bxa6","e4"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f4","O-O","Nf3","e5","d5","c6","Bd3","b5","b3","b4","Ne2","Qb6"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f4","O-O","e5","dxe5","fxe5","Nfd7","Nf3","c5"]
+      ]
+    },
+    "The Samisch": {
+      "normal": [
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f3","O-O","Be3","c5","d5","e6","Qd2","exd5","cxd5","a6","Bh6","Nxe4","Nxe4","Qh4+","g3","Qxh6","Qxh6","Bxh6","Nxd6","Nd7"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f3","O-O","Be3","c5","dxc5","dxc5","Qxd8","Rxd8","Bxc5","Nc6","Nd5","Nd7","Nxe7+","Nxe7","Bxe7","Bxb2","Bxd8","Bxa1"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f3","O-O","Be3","c5","d5","e6","Qd2","exd5","cxd5","a6","a4","Re8","Bd3","Nbd7","Nge2","Ne5","O-O","Nxd3"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f3","O-O","Be3","c5","Nge2","Nc6","Qd2","Qa5","d5","Ne5","Nc1","e6"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f3","O-O","Be3","c5","dxc5","dxc5","Bxc5","Nc6"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f3","O-O","Be3","c5","Nge2","Nc6","d5","Ne5","Ng3","h5","Be2","e6"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f3","O-O","Be3","c5","dxc5","dxc5","Qxd8","Rxd8","Bxc5","Nc6","Rd1","Rxd1+","Kxd1","Nd7","Be3","Bxc3","bxc3","Nde5"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f3","O-O","Be3","c5","d5","e6","Qd2","exd5","exd5","Re8","O-O-O","a6"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","e4","d6","f3","O-O","Be3","c5","d5","e6","Bd3","exd5","cxd5","a6","a4","Nbd7"]
+      ]
+    },
+    "Nc3 Without E4": {
+      "normal": [
+        ["d4","Nf6","c4","g6","Nc3","Bg7","Nf3","O-O","g3","d6","Bg2","Nc6","d5","Na5","Nd2","c6","b4","Ng4","Bb2","Qb6"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","Nf3","O-O","Bg5","h6","Bh4","g5","Bg3","d6","e3","Nh5","Bd3","e6","O-O","f5"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","Nf3","O-O","g3","d6","Bg2","Nc6","O-O","e5","d5","Nb8","e4","a5","Ne1","Na6","Nd3","Nd7"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","Nf3","O-O","Bf4","d6","e3","Nh5","Bg5","h6","Bh4","g5"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","Nf3","O-O","g3","d6","Bg2","Nc6","O-O","e5","dxe5","dxe5","Qxd8","Rxd8","Bg5","Be6","b3","h6"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","Nf3","O-O","e3","d6","Bd3","e5","O-O","Re8","dxe5","dxe5","e4","Bg4"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","Nf3","O-O","g3","d6","Bg2","Nc6","O-O","e5","d5","Nb8","e4","a5","a3","Nbd7"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","Nf3","O-O","Bg5","h6","Bh4","g5","Nxg5","hxg5","Bxg5","d6","e4","c5","d5","Nh7","Bh4","Nd7"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","Nf3","O-O","e3","d6","Bd3","e5","dxe5","dxe5","Nxe5","Qe7","Nf3","Rd8","Qc2","Na6","a3","Nc5","Be2","Bf5"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","Nf3","O-O","Bg5","h6","Bh4","g5","Bg3","d6","e3","Nh5","Bd3","e6","Qc2","f5","O-O-O","Nc6"],
+        ["d4","Nf6","c4","g6","Nc3","Bg7","Nf3","O-O","g3","d6","Bg2","Nc6","d5","Na5","b3","c5"]
+      ]
+    },
+    "No Nc3 Setups": {
+      "normal": [
+        ["d4","Nf6","c4","g6","h4","c5","d5","h5"],
+        ["d4","Nf6","c4","g6","Nf3","Bg7","g3","O-O","Bg2","d6","O-O","Nc6","d5","Na5","Qc2","Bf5","Qa4","c5","Nc3","Bd7"],
+        ["d4","Nf6","c4","g6","Nf3","Bg7","g3","O-O","Bg2","d6","O-O","Nc6","d5","Na5","Nbd2","c5"],
+        ["d4","Nf6","c4","g6","f3","Bg7","e4","d6","Nc3","O-O","Be3","c5"]
+      ]
+    },
+    "Anti-English/Reti": {
+      "normal": [
+        ["c4","Nf6","Nc3","g6","g3","Bg7","Bg2","O-O","e4","d6","Nge2","c5","O-O","Nc6","d3","a6","h3","Rb8","a4","Ne8"],
+        ["c4","Nf6","Nc3","g6","g3","Bg7","Bg2","O-O","Nf3","d6","O-O","e5","d3","c6","Bg5","h6","Bxf6","Qxf6"],
+        ["Nf3","Nf6","g3","g6","Bg2","Bg7","O-O","O-O","d3","d5","Nbd2","c5","e4","Nc6","Re1","e5","exd5","Nxd5","Nc4","f6","a4","Be6","c3","Qd7"],
+        ["c4","Nf6","Nc3","g6","g3","Bg7","Bg2","O-O","Nf3","d6","O-O","e5","d3","c6","Rb1","a5","a3","h6","b4","axb4","axb4","Be6","b5","Nbd7","bxc6","bxc6"]
+      ]
+    }
+  }, // End of KID
+
+  "D4 Sidelines": {
+    "Anti-London": {
+      "normal": [
+        ["d4","Nf6","Bf4","d5","e3","c5","c3","Nc6","Bd3","Qb6","Qc1","cxd4","exd4","e5","dxe5","Ng4","Nh3","Ngxe5"],
+        ["d4","Nf6","Bf4","d5","e3","c5","c3","Nc6","Bd3","Qb6","b3","Bg4"],
+        ["d4","Nf6","Bf4","d5","e3","c5","c3","Nc6","Bd3","Qb6","Qb3","c4","Qxb6","axb6","Bc2","b5","Na3","b4","Nb5","Ra5","a4","b3","Bb1","e6"],
+        ["d4","Nf6","Bf4","d5","e3","c5","c3","Nc6","Nd2","g6","Ngf3","Qb6","Qb3","c4","Qc2","Bf5","Qc1","Nh5","Bg5","h6","Bh4","g5","Bg3","Nxg3","hxg3","Bg7"],
+        ["d4","Nf6","Bf4","d5","e3","c5","c3","Nc6","Nf3","Qb6","b3","cxd4","cxd4","Bf5","Bd3","Qa5+"],
+        ["d4","Nf6","Bf4","d5","e3","c5","c3","Nc6","Nf3","Qb6","b3","cxd4","exd4","Bf5","Bd3","Bxd3","Qxd3","e6","O-O","Be7"],
+        ["d4","Nf6","Bf4","d5","e3","c5","c3","Nc6","Nf3","Qb6","Qc2","Bf5","Qc1","cxd4","exd4","Rc8","Nbd2","Nb4"],
+        ["d4","Nf6","Bf4","d5","e3","c5","c3","Nc6","Nf3","Qb6","Qc2","Bf5","Bd3","Bxd3","Qxd3","Qxb2","O-O","Qxa1","Qc2","cxd4","cxd4","Ne4","Nfd2","Nxd4","exd4","Qxd4","Nxe4","Qxe4"],
+        ["d4","Nf6","Bf4","d5","e3","c5","c3","Nc6","Nf3","Qb6","Qb3","c4","Qc2","Bf5","Qc1","e6","Nbd2","Qd8","b3","b5","a4","a6"],
+        ["d4","Nf6","Bf4","d5","e3","c5","c3","Nc6","Nf3","Qb6","Qb3","c4","Qxb6","axb6","Nbd2","b5","Be2","Bf5"]
+      ]
+    },
+    "Anti Jobava London": {
+      "normal": [
+        ["d4","Nf6","Nc3","d5","Bf4","c5","Nb5","Qa5+","Nc3","cxd4","Qxd4","Nc6","Qa4","Qxa4","Nxa4","e5"],
+        ["d4","Nf6","Nc3","d5","Bf4","c5","e3","cxd4","Nb5","Qa5+","c3","dxc3"],
+        ["d4","Nf6","Nc3","d5","Bf4","c5","e3","cxd4","exd4","a6","Bd3","Nc6","Nge2","e6","Qd2","Bd7","O-O-O","Nb4"],
+        ["d4","Nf6","Nc3","d5","Bf4","c5","e3","cxd4","exd4","a6","Nf3","Nc6","Ne5","Bd7","Nxd7","Qxd7","Be2","e6","O-O","Bd6"],
+        ["d4","Nf6","Nc3","d5","Bf4","c5","e3","cxd4","exd4","a6","Nf3","Nc6","Ne5","Bd7","g4","h6","h4","Rc8"],
+        ["d4","Nf6","Nc3","d5","Bf4","c5","e3","cxd4","exd4","a6","Nf3","Nc6","Ne5","Bd7","Be2","e6","O-O","Qb6","Nxc6","Bxc6"],
+        ["d4","Nf6","Nc3","d5","Bf4","c5","e3","cxd4","exd4","a6","Nf3","Nc6","Bd3","Bg4","h3","Bxf3","Qxf3","Nxd4"],
+        ["d4","Nf6","Nc3","d5","Bf4","c5","dxc5","d4","Nb1","e6","e3","Bxc5","exd4","Bxd4"],
+      ]
+    },
+    "Anti Trompowsky": {
+      "normal": [
+        ["d4","Nf6","Bg5","d5","Bxf6","gxf6","e3","e5","Nf3","Nc6","Bb5","Rg8","O-O","Bg4"],
+        ["d4","Nf6","Bg5","d5","Bxf6","gxf6","e3","e5","c4","Nc6","Nc3","exd4","exd4","dxc4"],
+        ["d4","Nf6","Bg5","d5","Bxf6","gxf6","e3","e5","c4","Nc6","cxd5","Qxd5","Nc3","Bb4","a3","Bxc3+","bxc3","Qa5","Qd2","Be6"],
+        ["d4","Nf6","Bg5","d5","Bxf6","gxf6","e3","e5","c3","c5","dxc5","Bxc5","Nd2","Nc6","Nb3","Bb6","Bb5","Be6","Nf3","Rg8"],
+        ["d4","Nf6","Bg5","d5","Bxf6","gxf6","e3","e5","c3","c5","Nf3","Nc6","Bb5","Rg8","O-O","Qb6","Bxc6+","Qxc6","dxe5","Bh3"],
+      ]
+    }
+  }, // End of D4 Sidelines
+
+  "Bishop's Opening": {
+    "Urusov Gambit": {
+      "normal": [
+
+    //Accepts the Gambit
+
+      //Knight Takes
+        ["e4", "e5", "Bc4", "Nf6", "d4", "Nxe4", "dxe5", "Nc6", "Bxf7+", "Kxf7", "Qd5+", "Ke8", "Qxe4", "Qe7", "Nf3", "Qb4+", "Nc3", "Qxe4","Nxe4","b6","Be3","Ba6","a3","Be7","O-O-O","Be2","Rd5","Be7","Re1","Bc4","Rdd1"],
+        ["e4", "e5", "Bc4", "Nf6", "d4", "Nxe4", "dxe5", "Nc6", "Bxf7+", "Kxf7", "Qd5+","Ke7","Nf3","d6","Qxe4","d5","Bg5+","Ke8","Qd3","Be7","Bxe7","Nxe7","Nc3","Bf5","Qb5+","c6","Qxb7","Qb8","Qxb8+","Rxb8","O-O-O","Bg4","Rd4","Bxf3","gxf3","Rf8","f4"],
+        ["e4", "e5", "Bc4", "Nf6", "d4", "Nxe4", "dxe5", "d5", "Bxd5", "Nxf2", "Bxf7+", "Kxf7", "Qxd8"],
+        ["e4", "e5", "Bc4", "Nf6", "d4", "Nxe4", "dxe5", "Bc5", "Qd5"],
+        ["e4", "e5", "Bc4", "Nf6", "d4", "Nxe4", "dxe5", "Bc5", "Qd5", "Bxf2+", "Kf1", "O-O", "Qxe4"],
+      //Pawn Takes
+        ["e4", "e5", "Bc4", "Nf6", "d4", "exd4", "Nf3", "Nxe4", "Qxd4", "Nd6", "O-O", "Nc6", "Re1+", "Be7", "Qxg7", "Rf8", "Bh6"],
+        ["e4", "e5", "Bc4", "Nf6", "d4", "exd4", "Nf3", "Nxe4", "Qxd4", "Nf6", "Bg5", "Be7", "Nc3", "Nc6", "Qh4", "O-O", "O-O-O"],
+        ["e4", "e5", "Bc4", "Nf6", "d4", "exd4", "Nf3", "Nxe4", "Qxd4", "Nf6", "Bg5", "Be7", "Nc3", "c6", "O-O-O", "d5", "Bd3"],
+        ["e4", "e5", "Bc4", "Nf6", "d4", "exd4", "Nf3", "d6", "Ng5", "d5", "exd5", "Nxd5", "O-O", "Be7", "Nxf7", "Kxf7", "Qh5+", "Ke6", "Re1+", "Kd6", "Qxd5+"],
+        ["e4", "e5", "Bc4", "Nf6", "d4", "exd4", "Nf3", "Nc6", "O-O", "Bc5", "e5", "Ng4", "c3", "dxc3", "Bxf7+", "Kxf7", "Qd5+"],
+        ["e4", "e5", "Bc4", "Nf6", "d4", "exd4", "Nf3", "Nc6", "O-O", "Bc5", "e5", "Ng4", "h3", "Nh6", "Bxh6", "gxh6", "Qd2"],
+        ["e4", "e5", "Bc4", "Nc6", "d4", "exd4", "c3", "dxc3", "Nxc3"],
+        ["e4", "e5", "Bc4", "Nc6", "d4", "exd4", "c3", "Nf6", "Nf3", "Nxe4", "O-O", "d5", "Bb5"],
+        ["e4", "e5", "Bc4", "c6", "d4", "d5", "exd5", "cxd5", "Bb3"]
+        ["e4", "e5", "Bc4", "Nf6", "d4", "exd4", "Nf3", "Nc6", "O-O", "Bc5", "e5", "Ng4", "c3", "dxc3", "Nxc3", "O-O", "Ng5", "Ncxe5", "Qd5+"],
+        ["e4", "e5", "Bc4", "Nf6", "d4", "exd4", "Nf3", "Nxe4", "Qxd4", "Nf6", "Bg5", "Be7", "Nc3", "c6", "O-O-O", "d5", "Bd3", "O-O", "Rhe1", "Be6", "Qh4", "Nbd7", "Nd4"],
+        ["e4", "e5", "Bc4", "Nf6", "d4", "exd4", "Nf3", "Nc6", "O-O", "d6", "Nxd4", "Be7", "Nc3", "O-O", "h4", "Nxd4", "Qxd4", "Be6", "Bd3", "Nd7", "Nd5", "Bxh4", "g3", "Bf6", "Nxf6+", "Qxf6", "Qxf6", "Nxf6", "f3", "Nd7", "Kg2", "f5", "Rh1", "fxe4", "Bxe4", "c6", "Bxh7+", "Kf7", "Bf4"],
+        ["e4", "e5", "Bc4", "Nf6", "d4", "exd4", "Nf3", "Nxe4", "Qxd4", "Nf6", "Bg5", "Be7", "Nc3", "c6", "O-O-O", "d5", "Bd3", "O-O", "Qh4", "Nbd7", "Rhe1", "Re8", "g3!", "Nf8", "Bf4", "Ng6", "Bxg6", "hxg6", "Ng5"],
+        ["e4", "e5", "Bc4", "Nf6", "d4", "exd4", "Nf3", "Nxe4", "Qxd4", "Nf6", "Bg5", "Be7", "Nc3", "c6", "O-O-O", "d5", "Bd3", "O-O", "Rhe1", "Be6", "Qh4", "Nbd7", "Nd4", "h6", "Nxe6", "fxe6", "Rxe6", "hxg5", "Qxg5", "Nc5", "Re3", "Nfe4", "Qh5", "Bg5", "f4", "Bxf4+", "Kb1", "Nf2", "Bh7+", "Kh8", "Bg6+", "Kg8", "Qh7#"],
+        ["e4", "e5", "Bc4", "Nf6", "d4", "exd4", "Nf3", "Nxe4", "Qxd4", "Nf6", "Bg5", "Be7", "Nc3", "O-O", "O-O-O", "c6", "Bd3", "d5", "Qh4", "Nbd7", "Rhe1", "Re8", "Ne5", "Nf8", "f4"],
+      ],
+    },
+
+    "Urusov test": {
+      "normal": [
+        
+      ],
+    }
+  }
+};
+
+
+
+
+
+
+// ------------------------------
+// DOM refs
+// ------------------------------
+const openingSelect = document.getElementById('openingSelect');
+const variationSelect = document.getElementById('variationSelect');
+const modeSelect = document.getElementById('modeSelect');
+const pgnTextarea = document.getElementById('pgn');
+const infoEl = document.getElementById('info');
+const statusEl = document.getElementById('status');
+const statsEl = document.getElementById('stats');
+const hintBtn = document.getElementById('hintBtn');
+const loadOpeningBtn = document.getElementById('loadOpeningBtn');
+const flipBoardBtn = document.getElementById('flipBoardBtn');
+const toggleFreeBtn = document.getElementById('toggleFreeBtn');
+const startWhiteBtn = document.getElementById('startWhite');
+const startBlackBtn = document.getElementById('startBlack');
+const resetBtn = document.getElementById('reset');
+
+// ------------------------------
+// Trainer state
+// ------------------------------
+let board = null;
+let game = new Chess();
+let currentLine = [];     // array of SAN moves (both sides)
+let moveIndex = 0;        // next move index into currentLine
+let userColor = 'w';      // 'w' or 'b'
+let trainerActive = false;
+let freeDrag = false;
+let correctCount = 0, wrongCount = 0;
+
+// ------------------------------
+// Populate opening dropdown
+// ------------------------------
+function populateOpenings() {
+  for (const o of Object.keys(openings)) {
+    const opt = document.createElement('option');
+    opt.value = o;
+    opt.textContent = o;
+    openingSelect.appendChild(opt);
+  }
+}
+populateOpenings();
+
+openingSelect.addEventListener('change', () => {
+  variationSelect.innerHTML = '<option value="">-- Select Variation --</option>';
+  const o = openingSelect.value;
+  if (!o) return;
+  // "All variations" option
+  const allOpt = document.createElement('option');
+  allOpt.value = '__all__';
+  allOpt.textContent = 'All Variations';
+  variationSelect.appendChild(allOpt);
+  for (const v of Object.keys(openings[o])) {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    variationSelect.appendChild(opt);
+  }
+});
+
+// ------------------------------
+// Board config
+// ------------------------------
+function playSound(id) {
+  try {
+    const el = document.getElementById(id);
+    if (el) { el.currentTime = 0; el.play(); }
+  } catch (e) { /* ignore */ }
+}
+
+function playMoveSound(move, isPlayer) {
+  if (!move || !move.flags) return;
+  if (move.flags.includes('c')) playSound('soundCapture');
+  else if (move.flags.includes('k') || move.flags.includes('q')) playSound('soundCastle');
+  else playSound(isPlayer ? 'soundMoveSelf' : 'soundOpponentMove');
+
+  if (game.in_check()) {
+    playSound('soundCheck');
+  }
+}
+
+function updateStatus() {
+  statusEl.textContent = `Move: ${moveIndex} / ${currentLine.length}`;
+  statsEl.textContent = `Correct: ${correctCount} \u00A0 Wrong: ${wrongCount}`;
+}
+
+function setInfo(txt) { infoEl.textContent = txt; }
+
+// onDragStart — prevent picking up opponent piece when trainerActive & freeDrag=OFF
+function onDragStart(source, piece, position, orientation) {
+  if (freeDrag || !trainerActive) return true; // allow in free mode or when trainer inactive
+  // only allow dragging pieces of the player's color while it's player's turn
+  const turn = game.turn(); // 'w' or 'b'
+  // piece is like 'wP' or 'bN'
+  const pieceColor = piece.charAt(0);
+  if (turn !== userColor) return false;           // not player's turn
+  if (pieceColor !== userColor) return false;     // piece not owned by player
+  return true;
+}
+
+// onDrop — handle a user drop
+function onDrop(source, target, piece, newPos, oldPos, orientation) {
+  // Free-drag or trainer inactive: just play the move if legal
+  if (freeDrag || !trainerActive) {
+    const mv = game.move({ from: source, to: target, promotion: 'q' });
+    if (mv === null) return 'snapback';
+    board.position(game.fen());
+    playMoveSound(mv, true);
+    updateStatus();
+    return;
+  }
+
+  // Trainer active & not free-drag: enforce book move
+  // Ensure it's player's turn
+  if (game.turn() !== userColor) return 'snapback';
+
+  const attempted = game.move({ from: source, to: target, promotion: 'q' });
+  if (attempted === null) return 'snapback';
+
+  const expectedSAN = currentLine[moveIndex]; // expected SAN at this index
+  // Accept exact SAN match
+  if (attempted.san === expectedSAN) {
+    // correct
+    correctCount++;
+    playMoveSound(attempted, true);
+    moveIndex++;
+    updateStatus();
+
+    // If more moves remain, auto-play opponent moves until it's player's turn again
+    setTimeout(() => autoPlayIfNeeded(), 150);
+  } else {
+    // wrong: undo and snap back
+  wrongCount++;
+  const wrongSound = document.getElementById('soundWrongMove');
+  if (wrongSound) {
+  wrongSound.volume = 0.23; // adjust volume here
+  wrongSound.currentTime = 0;
+  wrongSound.play();
+}
+
+game.undo();
+board.position(game.fen());
+updateStatus();
+return 'snapback';
+
+  }
+}
+
+// onSnapEnd — make sure board shows current game position after animations
+function onSnapEnd() {
+  board.position(game.fen());
+}
+
+// auto-play opponent moves until it's the user's turn (or line ends)
+function autoPlayIfNeeded() {
+  while (moveIndex < currentLine.length) {
+    const turnToMove = (moveIndex % 2 === 0) ? 'w' : 'b';
+    // if it's user's turn, stop
+    if (turnToMove === userColor) break;
+
+    const expectedSAN = currentLine[moveIndex];
+    // apply SAN move on the game
+    const mv = game.move(expectedSAN);
+    if (!mv) {
+      // invalid expected move for current position — stop to avoid infinite loop
+      setInfo(`Failed to play book move: ${expectedSAN}`);
+      break;
+    }
+    board.position(game.fen(), true);
+    playMoveSound(mv, false);
+    moveIndex++;
+
+    // if we finished the variation
+    if (moveIndex >= currentLine.length) {
+      playSound("soundVariationComplete")
+      setInfo('Variation complete!');
+      trainerActive = false; // mark finished
+      break;
+    }
+  }
+  updateStatus();
+}
+
+function playSoundWrapper(id) {
+  try { playSound(id); } catch (e) {}
+}
+
+// ------------------------------
+// Initialize Chessboard
+// ------------------------------
+function initBoard() {
+  game = new Chess();
+  const cfg = {
+    draggable: true,
+    position: 'start',
+    pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
+    onDragStart: onDragStart,
+    onDrop: onDrop,
+    onSnapEnd: onSnapEnd
+  };
+  board = Chessboard('board', cfg);
+}
+initBoard();
+
+// ------------------------------
+// Loading PGN from textarea
+// ------------------------------
+function loadPGNFromTextarea() {
+  const raw = pgnTextarea.value.trim();
+  if (!raw) { setInfo('Paste a PGN or SAN moves first.'); return false; }
+
+  const tmp = new Chess();
+  // try load_pgn (allows complete PGN); chess.js returns true on success
+  const ok = tmp.load_pgn(raw);
+  if (!ok) {
+    // fallback: tokens only (SAN list)
+    try {
+      const tokens = raw.replace(/[0-9]+\./g,'').replace(/\s+/g,' ').trim();
+      const arr = tokens.split(' ').filter(s => s.length > 0).filter(s => !['1-0','0-1','1/2-1/2'].includes(s));
+      // validate by applying moves
+      const tmp2 = new Chess();
+      for (const m of arr) {
+        const mv = tmp2.move(m);
+        if (!mv) throw new Error('invalid move in SAN tokens: ' + m);
+      }
+      currentLine = arr.slice();
+      moveIndex = 0;
+      game.reset();
+      board.start();
+      trainerActive = true;
+      setInfo(`Loaded ${currentLine.length} SAN moves (tokens).`);
+      updateStatus();
+      // autoplay opponent moves if needed
+      setTimeout(autoPlayIfNeeded, 150);
+      return true;
+    } catch (e) {
+      setInfo('Invalid PGN / SAN moves.');
+      return false;
+    }
+  }
+
+  currentLine = tmp.history();
+  moveIndex = 0;
+  game.reset();
+  board.start();
+  trainerActive = true;
+  setInfo(`Loaded ${currentLine.length} moves (PGN).`);
+  updateStatus();
+  setTimeout(autoPlayIfNeeded, 150);
+  return true;
+}
+
+// ------------------------------
+// Load a selected opening / variation
+// ------------------------------
+loadOpeningBtn.addEventListener('click', () => {
+  // pgn textarea takes priority
+  if (pgnTextarea.value.trim().length > 0) {
+    loadPGNFromTextarea();
+    return;
+  }
+
+  const opening = openingSelect.value;
+  const variation = variationSelect.value;
+  const mode = modeSelect.value || 'normal';
+
+  if (!opening || !variation) {
+    setInfo('Select opening and variation (or All Variations).');
+    return;
+  }
+
+  let candidates = [];
+  if (variation === '__all__') {
+    for (const chapter of Object.keys(openings[opening] || {})) {
+      const arr = openings[opening][chapter] && openings[opening][chapter][mode];
+      if (!arr) continue;
+      // arr is usually an array of variations (each variation is an array of moves)
+      if (Array.isArray(arr) && arr.length && Array.isArray(arr[0])) {
+        candidates.push(...arr);
+      } else if (Array.isArray(arr)) {
+        candidates.push(arr);
+      }
+    }
+  } else {
+    const arr = openings[opening] && openings[opening][variation] && openings[opening][variation][mode];
+    if (!arr) { setInfo('No variations in that mode.'); return; }
+    if (Array.isArray(arr) && arr.length && Array.isArray(arr[0])) candidates = arr.slice();
+    else candidates.push(arr);
+  }
+
+  if (candidates.length === 0) {
+    setInfo('No variations available for this selection.');
+    return;
+  }
+
+  // choose random variation from candidates
+  const moves = candidates[Math.floor(Math.random() * candidates.length)];
+  // moves should be an array of SAN strings
+  currentLine = moves.slice();
+  moveIndex = 0;
+  correctCount = 0; wrongCount = 0;
+  game.reset();
+  board.start();
+  trainerActive = true;
+  setInfo(`Loaded: ${opening} — ${variation} (${mode}).`);
+  updateStatus();
+  // autoplay opponent if needed (if opponent to move)
+  setTimeout(autoPlayIfNeeded, 150);
+});
+
+// ------------------------------
+// Flip board, Hint, Toggle Free Drag
+// ------------------------------
+flipBoardBtn.addEventListener('click', () => board.flip());
+
+hintBtn.addEventListener('click', () => {
+  if (!trainerActive || moveIndex >= currentLine.length) { setInfo('No hint available.'); return; }
+  const next = currentLine[moveIndex] || '';
+  setInfo(`Hint: next move SAN = '${next}'`);
+});
+
+// ------------------------------
+// Start training (set which color is user)
+// ------------------------------
+function startTraining(side) {
+  game.reset();
+  board.start();
+  currentLine = currentLine || [];
+  moveIndex = 0;
+  correctCount = 0; wrongCount = 0;
+  userColor = side === 'white' ? 'w' : 'b';
+  trainerActive = true;
+  setInfo(`Training started. You are ${side}.`);
+  board.orientation(side === 'white' ? 'white' : 'black');
+  updateStatus();
+  setTimeout(autoPlayIfNeeded, 150);
+}
+startWhiteBtn.addEventListener('click', () => startTraining('white'));
+startBlackBtn.addEventListener('click', () => startTraining('black'));
+
+// ------------------------------
+// Reset button
+// ------------------------------
+resetBtn.addEventListener('click', () => {
+  game.reset(); board.start(); currentLine = []; moveIndex = 0; trainerActive = false;
+  correctCount = 0; wrongCount = 0;
+  setInfo('Reset.');
+  updateStatus();
+});
+
+// ------------------------------
+// Helper: load PGN on double click of textarea
+// ------------------------------
+pgnTextarea.addEventListener('dblclick', loadPGNFromTextarea);
+
+// initialize UI text
+setInfo('Select opening, variation (or All Variations), mode, and Load.');
+updateStatus();
+
+</script>
+</body>
+</html>
